@@ -22,7 +22,7 @@ const cli = meow(`
 
   Options
     --snapshot    Imprime el árbol una vez y sale
-    --all         Incluye sesiones de las últimas 24h
+    --all         Muestra todas las sesiones, incluyendo las inactivas
     --project     Filtra por directorio de proyecto
 
   Examples
@@ -43,12 +43,7 @@ const projectFilter = cli.flags.project
   ? (cwd: string) => cwd === cli.flags.project || cwd.startsWith(cli.flags.project! + '/')
   : undefined
 
-// Nota: --all requiere escanear JSONL históricos. Implementación futura.
-if (cli.flags.all) {
-  process.stderr.write('--all aún no implementado; mostrando solo sesiones activas.\n')
-}
-
-const { unmount } = render(React.createElement(App, { projectFilter }))
+const { unmount } = render(React.createElement(App, { projectFilter, showInactive: cli.flags.all }))
 
 if (cli.flags.snapshot) {
   // Esperar a que los providers lean los archivos y el render loop dispare al menos una vez

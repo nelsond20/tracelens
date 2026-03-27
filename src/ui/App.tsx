@@ -14,11 +14,12 @@ import type { SessionEvent, JournalEvent, WindowState } from '../providers/types
 interface Props {
   claudeProjectsDir?: string
   projectFilter?: (cwd: string) => boolean
+  showInactive?: boolean
 }
 
 const EMPTY_STATE: AppState = { sessions: [], window: null, totalCost: 0, lastUpdated: 0 }
 
-export function App({ claudeProjectsDir, projectFilter }: Props) {
+export function App({ claudeProjectsDir, projectFilter, showInactive }: Props) {
   const [appState, setAppState] = useState<AppState>(EMPTY_STATE)
 
   const accRef = useRef(new TokenAccumulator())
@@ -60,7 +61,7 @@ export function App({ claudeProjectsDir, projectFilter }: Props) {
     })
 
     const renderInterval = setInterval(() => {
-      setAppState(buildAppState(sessionsRef.current, acc, burn, windowRef.current, claudeProjectsDir))
+      setAppState(buildAppState(sessionsRef.current, acc, burn, windowRef.current, claudeProjectsDir, showInactive))
     }, 300)
 
     sessionProv.start()
@@ -73,7 +74,7 @@ export function App({ claudeProjectsDir, projectFilter }: Props) {
       journalProv.stop()
       windowProv.stop()
     }
-  }, [claudeProjectsDir])
+  }, [claudeProjectsDir, showInactive])
 
   return (
     <Box flexDirection="column" padding={1}>

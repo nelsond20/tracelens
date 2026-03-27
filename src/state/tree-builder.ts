@@ -70,7 +70,8 @@ export function buildAppState(
   accumulator: TokenAccumulator,
   burnTracker: BurnTracker,
   window: WindowState | null,
-  claudeProjectsDir?: string
+  claudeProjectsDir?: string,
+  showInactive = false
 ): AppState {
   const now = Date.now()
   const remainingMinutes = window ? Math.max(0, (window.windowEnd - now / 1000) / 60) : 0
@@ -133,9 +134,16 @@ export function buildAppState(
     }
   })
 
-  const totalCost = sessionStates.reduce((sum, s) => {
+  const visible = showInactive
+    ? sessionStates
+    : sessionStates.filter(s =>
+        s.orchestrator.burnRatePerMinute > 0 ||
+        s.subAgents.some(a => a.burnRatePerMinute > 0)
+      )
+
+  const totalCost = visible.reduce((sum, s) => {
     return sum + s.orchestrator.totals.cost + s.subAgents.reduce((a, sa) => a + sa.totals.cost, 0)
   }, 0)
 
-  return { sessions: sessionStates, window, totalCost, lastUpdated: now }
+  return { sessions: visible, window, totalCost, lastUpdated: now }
 }

@@ -1,4 +1,5 @@
 import React from 'react'
+import * as path from 'node:path'
 import { Box, Text } from 'ink'
 import type { SessionState } from '../state/types.js'
 import { AgentNode } from './AgentNode.js'
@@ -20,8 +21,8 @@ function SubBranch({ sessions }: { sessions: SessionState[] }) {
           <Text color={session.color}>│</Text>
           {/* Orquestador */}
           <AgentNode agent={session.orchestrator} />
-          {/* Línea hacia el tronco */}
-          <Text color={session.color}>│</Text>
+          {/* Nombre del proyecto */}
+          <Text color={session.color}>{path.basename(session.cwd)}</Text>
         </Box>
       ))}
     </Box>
