@@ -75,7 +75,8 @@ const stdout = !cli.flags.snapshot
             const str = typeof chunk === 'string' ? chunk : chunk.toString('utf8')
             if (str.startsWith(CLEAR_TERMINAL)) {
               const content = str.slice(CLEAR_TERMINAL.length).replace(/\n+$/, '')
-              return process.stdout.write('\x1b[H' + content + '\x1b[J')
+              const cleared = content.replace(/\n/g, '\x1b[K\n')  // limpia hasta fin de línea antes de cada salto
+              return process.stdout.write('\x1b[H' + cleared + '\x1b[J')
             }
             return target.write(chunk)
           }

@@ -72,6 +72,11 @@ export function App({ claudeProjectsDir, projectFilter }: Props) {
     })
 
     const renderInterval = setInterval(() => {
+      // Re-discover paths para capturar nuevos sub-agentes sin esperar evento de sesión
+      const discoveries = discoverSessions(sessionsRef.current, claudeProjectsDir)
+      journalProv.setWatchPaths(
+        discoveries.flatMap(d => [d.jsonlPath, ...d.subAgentPaths.map(sa => sa.filePath)])
+      )
       setAppState(buildAppState(sessionsRef.current, acc, burn, tool, windowRef.current, claudeProjectsDir))
     }, 300)
 
