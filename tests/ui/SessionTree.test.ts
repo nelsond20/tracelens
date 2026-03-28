@@ -53,9 +53,9 @@ describe('subAgentsRowWidth', () => {
 
 describe('branchLine', () => {
   it('genera línea con ┌, ┴ centrado, y ┐', () => {
-    // totalWidth=10: leftArm=Math.floor(10/2)-1=4, rightArm=10-4-3=3
-    // "┌────┴───┐" = 10 chars
-    expect(branchLine(10)).toBe('┌────┴───┐')
+    // totalWidth=10: leftArm=Math.floor(9/2)-1=3, rightArm=10-3-3=4
+    // "┌───┴────┐" = 10 chars, ┴ at position 4 = floor((10-1)/2)
+    expect(branchLine(10)).toBe('┌───┴────┐')
   })
 
   it('la longitud total es igual a totalWidth', () => {

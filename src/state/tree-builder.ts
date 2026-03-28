@@ -141,7 +141,18 @@ export function buildAppState(
   const remainingMinutes = window ? Math.max(0, (window.windowEnd - now / 1000) / 60) : 0
   const ceiling = window?.estimatedCeiling ?? 0
 
-  const discoveries = discoverSessions(sessions, claudeProjectsDir)
+  const rawDiscoveries = discoverSessions(sessions, claudeProjectsDir)
+
+  // Deduplicar por sessionId: si /clear crea un nuevo sessionId pero el proceso
+  // viejo sigue en activeSessions, ambos pueden resolver al mismo actualSessionId.
+  const seenIds = new Set<string>()
+  const discoveries = rawDiscoveries
+    .sort((a, b) => b.startedAt - a.startedAt)
+    .filter(d => {
+      if (seenIds.has(d.sessionId)) return false
+      seenIds.add(d.sessionId)
+      return true
+    })
 
   const sessionStates: SessionState[] = discoveries.map(d => {
     const orchKey = buildAgentKey(d.sessionId, null)

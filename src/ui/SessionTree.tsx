@@ -14,7 +14,7 @@ export function subAgentsRowWidth(subAgents: AgentState[], gap = 4): number {
 
 export function branchLine(totalWidth: number): string {
   if (totalWidth < 3) return '│'
-  const leftArm  = Math.floor(totalWidth / 2) - 1
+  const leftArm  = Math.floor((totalWidth - 1) / 2) - 1
   const rightArm = totalWidth - leftArm - 3
   return '┌' + '─'.repeat(leftArm) + '┴' + '─'.repeat(rightArm) + '┐'
 }
@@ -97,7 +97,7 @@ function sessionsBranchLine(sessions: SessionState[], gap = 4): string {
   const lastSubStart = total - subtreeWidths[subtreeWidths.length - 1]
   const endPos = lastSubStart + Math.floor((subtreeWidths[subtreeWidths.length - 1] - lastBoxW) / 2) + lastBoxW - 1
 
-  const midPos = Math.floor(total / 2)
+  const midPos = Math.floor((total - 1) / 2)
   const leftArm = midPos - startPos - 1
   const rightArm = endPos - midPos - 1
 
