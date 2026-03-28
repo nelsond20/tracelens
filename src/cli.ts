@@ -76,7 +76,8 @@ const stdout = !cli.flags.snapshot
           return (chunk: Buffer | string) => {
             const str = typeof chunk === 'string' ? chunk : chunk.toString('utf8')
             if (str.startsWith(CLEAR_TERMINAL)) {
-              return process.stdout.write('\x1b[H' + str.slice(CLEAR_TERMINAL.length) + '\x1b[J')
+              const content = str.slice(CLEAR_TERMINAL.length).replace(/\n+$/, '')
+              return process.stdout.write('\x1b[H' + content + '\x1b[J')
             }
             return target.write(chunk)
           }
