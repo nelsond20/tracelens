@@ -5,31 +5,33 @@ import { JournalProvider } from '../providers/journal.js'
 import { WindowProvider } from '../providers/window.js'
 import { TokenAccumulator } from '../state/accumulator.js'
 import { BurnTracker } from '../state/burn-tracker.js'
+import { ToolTracker } from '../state/tool-tracker.js'
 import { buildAppState, buildAgentKey, discoverSessions } from '../state/tree-builder.js'
 import { WindowHeader } from './WindowHeader.js'
 import { SessionTree } from './SessionTree.js'
 import type { AppState } from '../state/types.js'
-import type { SessionEvent, JournalEvent, WindowState } from '../providers/types.js'
+import type { SessionEvent, JournalEvent, WindowState, ToolEvent } from '../providers/types.js'
 
 interface Props {
   claudeProjectsDir?: string
   projectFilter?: (cwd: string) => boolean
-  showInactive?: boolean
 }
 
 const EMPTY_STATE: AppState = { sessions: [], window: null, totalCost: 0, lastUpdated: 0 }
 
-export function App({ claudeProjectsDir, projectFilter, showInactive }: Props) {
+export function App({ claudeProjectsDir, projectFilter }: Props) {
   const [appState, setAppState] = useState<AppState>(EMPTY_STATE)
 
   const accRef = useRef(new TokenAccumulator())
   const burnRef = useRef(new BurnTracker())
+  const toolRef = useRef(new ToolTracker())
   const sessionsRef = useRef<SessionEvent[]>([])
   const windowRef = useRef<WindowState | null>(null)
 
   useEffect(() => {
     const acc = accRef.current
     const burn = burnRef.current
+    const tool = toolRef.current
 
     const sessionProv = new SessionProvider()
     const journalProv = new JournalProvider()
@@ -57,16 +59,30 @@ export function App({ claudeProjectsDir, projectFilter, showInactive }: Props) {
       const key = buildAgentKey(event.sessionId, event.agentId)
       const total = event.usage.inputTokens + event.usage.outputTokens +
         event.usage.cacheCreationInputTokens + event.usage.cacheReadInputTokens
-      burn.recordTokens(key, total)
+      burn.recordTokens(key, total, new Date(event.timestamp).getTime())
+    })
+
+    journalProv.on('tool', (event: ToolEvent) => {
+      const key = buildAgentKey(event.sessionId, event.agentId)
+      if (event.tools !== null) {
+        tool.recordTools(key, event.tools)
+      } else {
+        tool.clearTools(key)
+      }
     })
 
     const renderInterval = setInterval(() => {
-      setAppState(buildAppState(sessionsRef.current, acc, burn, windowRef.current, claudeProjectsDir, showInactive))
+      // Re-discover paths para capturar nuevos sub-agentes sin esperar evento de sesión
+      const discoveries = discoverSessions(sessionsRef.current, claudeProjectsDir)
+      journalProv.setWatchPaths(
+        discoveries.flatMap(d => [d.jsonlPath, ...d.subAgentPaths.map(sa => sa.filePath)])
+      )
+      setAppState(buildAppState(sessionsRef.current, acc, burn, tool, windowRef.current, claudeProjectsDir))
     }, 300)
 
     sessionProv.start()
+    windowProv.start()  // sincrónico: setea windowStart antes de la lectura inicial del JSONL
     journalProv.start()
-    windowProv.start()
 
     return () => {
       clearInterval(renderInterval)
@@ -74,11 +90,11 @@ export function App({ claudeProjectsDir, projectFilter, showInactive }: Props) {
       journalProv.stop()
       windowProv.stop()
     }
-  }, [claudeProjectsDir, showInactive])
+  }, [claudeProjectsDir])
 
   return (
     <Box flexDirection="column" padding={1}>
-      <WindowHeader state={appState} />
+      <WindowHeader />
       <SessionTree sessions={appState.sessions} />
     </Box>
   )

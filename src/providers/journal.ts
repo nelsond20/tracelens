@@ -1,7 +1,37 @@
 import { EventEmitter } from 'node:events'
 import * as fs from 'node:fs'
 import chokidar, { type FSWatcher } from 'chokidar'
-import type { DataProvider, JournalEvent } from './types.js'
+import type { DataProvider, JournalEvent, ToolEvent } from './types.js'
+
+export function extractToolEvent(entry: Record<string, unknown>): ToolEvent | null {
+  if (entry['type'] !== 'assistant') return null
+  const msg = entry['message'] as Record<string, unknown> | undefined
+  if (!msg) return null
+
+  const stopReason = msg['stop_reason'] as string | null
+  const sessionId = entry['sessionId'] as string
+  const agentId = (entry['agentId'] as string | undefined) ?? null
+
+  if (stopReason === 'tool_use') {
+    const content = msg['content'] as Array<Record<string, unknown>> | undefined
+    if (!content) return null
+    const tools: Record<string, number> = {}
+    for (const block of content) {
+      if (block['type'] === 'tool_use' && typeof block['name'] === 'string') {
+        const name = block['name'] as string
+        tools[name] = (tools[name] ?? 0) + 1
+      }
+    }
+    if (Object.keys(tools).length === 0) return null
+    return { sessionId, agentId, tools }
+  }
+
+  if (stopReason === 'end_turn') {
+    return { sessionId, agentId, tools: null }
+  }
+
+  return null
+}
 
 export class JournalProvider extends EventEmitter implements DataProvider<JournalEvent> {
   private watcher: FSWatcher | null = null
@@ -26,6 +56,8 @@ export class JournalProvider extends EventEmitter implements DataProvider<Journa
     this.watcher = chokidar.watch(this.watchPaths, {
       persistent: true,
       ignoreInitial: true,
+      usePolling: true,
+      interval: 500,
     })
     this.watcher.on('change', (filePath: string) => this.readFile(filePath, false))
     for (const p of this.watchPaths) this.readFile(p, true)
@@ -51,19 +83,23 @@ export class JournalProvider extends EventEmitter implements DataProvider<Journa
 
       const lines = buf.toString('utf8').split('\n').filter(l => l.trim())
       for (const line of lines) {
-        const event = this.parseLine(line, filePath)
+        let entry: Record<string, unknown>
+        try { entry = JSON.parse(line) } catch { continue }
+
+        const event = this.parseJournalEvent(entry, filePath)
         if (event) this.emit('data', event)
+
+        const toolEvent = extractToolEvent(entry)
+        if (toolEvent) this.emit('tool', toolEvent)
       }
     } catch { /* skip on read error */ }
   }
 
-  private parseLine(line: string, filePath: string): JournalEvent | null {
-    let entry: Record<string, unknown>
-    try { entry = JSON.parse(line) } catch { return null }
-
+  private parseJournalEvent(entry: Record<string, unknown>, filePath: string): JournalEvent | null {
     if (entry['type'] !== 'assistant') return null
     const msg = entry['message'] as Record<string, unknown> | undefined
     if (!msg?.['usage']) return null
+    if (msg['stop_reason'] == null) return null  // skip streaming chunks
 
     const usage = msg['usage'] as Record<string, number>
     const ts = entry['timestamp'] as string

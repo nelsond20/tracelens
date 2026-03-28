@@ -63,22 +63,21 @@ function ProjectNode({ session }: { session: SessionState }) {
       <Text color={c}>{`╔${border}╗`}</Text>
       <Text color={c}>{`║${inner}║`}</Text>
       <Text color={c}>{bottom}</Text>
+      <Text color={c}>│</Text>
 
-      {hasSubAgents ? (
+      <AgentNode agent={session.orchestrator} />
+
+      {hasSubAgents && (
         <>
+          <Text color={c}>│</Text>
           <Text color={c}>{session.subAgents.length > 1 ? branchLine(subRow) : '│'}</Text>
           <Box flexDirection="row" gap={4}>
             {session.subAgents.map(agent => (
               <AgentNode key={agent.agentId ?? agent.name} agent={agent} />
             ))}
           </Box>
-          <Text color={c}>│</Text>
         </>
-      ) : (
-        <Text color={c}>│</Text>
       )}
-
-      <AgentNode agent={session.orchestrator} />
     </Box>
   )
 }

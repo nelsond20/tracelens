@@ -38,3 +38,9 @@ export interface WindowState {
   ceilingLevel: 'Bajo' | 'Medio' | 'Alto'
   calculatedAt: string      // ISO 8601
 }
+
+export interface ToolEvent {
+  sessionId: string
+  agentId: string | null
+  tools: Record<string, number> | null  // null = limpiar tools del agente
+}

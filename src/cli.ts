@@ -22,7 +22,6 @@ const cli = meow(`
 
   Options
     --snapshot    Imprime el árbol una vez y sale
-    --all         Muestra todas las sesiones, incluyendo las inactivas
     --project     Filtra por directorio de proyecto
 
   Examples
@@ -33,7 +32,6 @@ const cli = meow(`
   importMeta: import.meta,
   flags: {
     snapshot: { type: 'boolean', default: false },
-    all: { type: 'boolean', default: false },
     project: { type: 'string' },
   },
 })
@@ -76,7 +74,9 @@ const stdout = !cli.flags.snapshot
           return (chunk: Buffer | string) => {
             const str = typeof chunk === 'string' ? chunk : chunk.toString('utf8')
             if (str.startsWith(CLEAR_TERMINAL)) {
-              return process.stdout.write('\x1b[H' + str.slice(CLEAR_TERMINAL.length) + '\x1b[J')
+              const content = str.slice(CLEAR_TERMINAL.length).replace(/\n+$/, '')
+              const cleared = content.replace(/\n/g, '\x1b[K\n')  // limpia hasta fin de línea antes de cada salto
+              return process.stdout.write('\x1b[H' + cleared + '\x1b[J')
             }
             return target.write(chunk)
           }
@@ -87,7 +87,7 @@ const stdout = !cli.flags.snapshot
     }) as NodeJS.WriteStream
   : process.stdout
 
-const { unmount } = render(React.createElement(App, { projectFilter, showInactive: cli.flags.all }), { stdout })
+const { unmount } = render(React.createElement(App, { projectFilter }), { stdout })
 doUnmount = unmount
 
 if (cli.flags.snapshot) {

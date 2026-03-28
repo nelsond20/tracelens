@@ -19,6 +19,7 @@ export interface AgentState {
   dangerRatio: number
   color: string   // hex
   isSidechain: boolean
+  currentTools: Record<string, number> | null
 }
 
 export interface SessionState {
