@@ -4,8 +4,6 @@ import type { AgentState } from '../state/types.js'
 
 interface Props {
   agent: AgentState
-  isLast?: boolean
-  isSubAgent?: boolean
 }
 
 function formatTokens(n: number): string {
@@ -23,16 +21,28 @@ function formatBurn(tokPerMin: number): string {
   return ` · burn ${formatTokens(tokPerMin)}/min`
 }
 
-export function AgentNode({ agent, isSubAgent = false }: Props) {
+export function agentInnerWidth(agent: AgentState): number {
+  const warn = agent.dangerRatio > 1.0 ? ' ⚠' : ''
+  const nameLine  = ` ${agent.name}${warn}`
+  const modelLine = ` ${agent.model}`
+  const tokLine   = ` ${formatTokens(agent.totals.totalTokens)} tok · ${formatCost(agent.totals.cost)}${formatBurn(agent.burnRatePerMinute)}`
+  return Math.max(nameLine.length, modelLine.length, tokLine.length)
+}
+
+export function agentBoxWidth(agent: AgentState): number {
+  return agentInnerWidth(agent) + 2
+}
+
+export function AgentNode({ agent }: Props) {
   const c = agent.color
-  const boxWidth = isSubAgent ? 26 : 22
-  const border = '═'.repeat(boxWidth)
-  const line = (content: string) => content.padEnd(boxWidth)
+  const w = agentInnerWidth(agent)
+  const border = '═'.repeat(w)
+  const line = (s: string) => s.slice(0, w).padEnd(w)
 
   const warn = agent.dangerRatio > 1.0 ? ' ⚠' : ''
-  const nameLine = line(` ${agent.name}${warn}`)
+  const nameLine  = line(` ${agent.name}${warn}`)
   const modelLine = line(` ${agent.model}`)
-  const tokLine = line(` ${formatTokens(agent.totals.totalTokens)} tok · ${formatCost(agent.totals.cost)}${formatBurn(agent.burnRatePerMinute)}`)
+  const tokLine   = line(` ${formatTokens(agent.totals.totalTokens)} tok · ${formatCost(agent.totals.cost)}${formatBurn(agent.burnRatePerMinute)}`)
 
   return (
     <Box flexDirection="column">
