@@ -10,7 +10,7 @@ import { buildAppState, buildAgentKey, discoverSessions } from '../state/tree-bu
 import { WindowHeader } from './WindowHeader.js'
 import { SessionTree } from './SessionTree.js'
 import type { AppState } from '../state/types.js'
-import type { SessionEvent, JournalEvent, WindowState } from '../providers/types.js'
+import type { SessionEvent, JournalEvent, WindowState, ToolEvent } from '../providers/types.js'
 
 interface Props {
   claudeProjectsDir?: string
@@ -24,12 +24,14 @@ export function App({ claudeProjectsDir, projectFilter }: Props) {
 
   const accRef = useRef(new TokenAccumulator())
   const burnRef = useRef(new BurnTracker())
+  const toolRef = useRef(new ToolTracker())
   const sessionsRef = useRef<SessionEvent[]>([])
   const windowRef = useRef<WindowState | null>(null)
 
   useEffect(() => {
     const acc = accRef.current
     const burn = burnRef.current
+    const tool = toolRef.current
 
     const sessionProv = new SessionProvider()
     const journalProv = new JournalProvider()
@@ -60,8 +62,17 @@ export function App({ claudeProjectsDir, projectFilter }: Props) {
       burn.recordTokens(key, total, new Date(event.timestamp).getTime())
     })
 
+    journalProv.on('tool', (event: ToolEvent) => {
+      const key = buildAgentKey(event.sessionId, event.agentId)
+      if (event.tools !== null) {
+        tool.recordTools(key, event.tools)
+      } else {
+        tool.clearTools(key)
+      }
+    })
+
     const renderInterval = setInterval(() => {
-      setAppState(buildAppState(sessionsRef.current, acc, burn, new ToolTracker(), windowRef.current, claudeProjectsDir))
+      setAppState(buildAppState(sessionsRef.current, acc, burn, tool, windowRef.current, claudeProjectsDir))
     }, 300)
 
     sessionProv.start()
