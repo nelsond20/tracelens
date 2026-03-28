@@ -8,7 +8,9 @@ const SESSIONS_DIR = path.join(os.homedir(), '.claude', 'sessions')
 
 export class SessionProvider extends EventEmitter implements DataProvider<SessionEvent> {
   private watcher: fs.FSWatcher | null = null
-  private known = new Map<string, SessionEvent>()  // pid → event
+  private pidToSession = new Map<string, string>()       // pid → sessionId
+  private sessionPids = new Map<string, Set<string>>()    // sessionId → Set<pid>
+  private emitted = new Map<string, SessionEvent>()       // sessionId → last emitted event
 
   start(): void {
     this.scan()
@@ -30,31 +32,54 @@ export class SessionProvider extends EventEmitter implements DataProvider<Sessio
         const raw = fs.readFileSync(path.join(SESSIONS_DIR, file), 'utf8')
         const data = JSON.parse(raw)
         const pid = String(data.pid)
+        const sessionId = data.sessionId as string
         currentPids.add(pid)
-        if (!this.known.has(pid)) {
+
+        if (this.pidToSession.has(pid)) continue
+
+        this.pidToSession.set(pid, sessionId)
+        let pids = this.sessionPids.get(sessionId)
+        if (!pids) {
+          pids = new Set()
+          this.sessionPids.set(sessionId, pids)
+        }
+        pids.add(pid)
+
+        if (!this.emitted.has(sessionId)) {
           const event: SessionEvent = {
-            sessionId: data.sessionId,
+            sessionId,
             pid: data.pid,
             cwd: data.cwd,
             startedAt: data.startedAt,
             kind: data.kind ?? 'interactive',
             active: true,
           }
-          this.known.set(pid, event)
+          this.emitted.set(sessionId, event)
           this.emit('data', event)
         }
       } catch { /* skip malformed file */ }
     }
 
-    for (const [pid, event] of this.known) {
+    for (const [pid, sessionId] of this.pidToSession) {
       if (!currentPids.has(pid)) {
-        this.known.delete(pid)
-        this.emit('data', { ...event, active: false })
+        this.pidToSession.delete(pid)
+        const pids = this.sessionPids.get(sessionId)
+        if (pids) {
+          pids.delete(pid)
+          if (pids.size === 0) {
+            this.sessionPids.delete(sessionId)
+            const event = this.emitted.get(sessionId)
+            if (event) {
+              this.emitted.delete(sessionId)
+              this.emit('data', { ...event, active: false })
+            }
+          }
+        }
       }
     }
   }
 
   getSessions(): SessionEvent[] {
-    return [...this.known.values()]
+    return [...this.emitted.values()]
   }
 }
