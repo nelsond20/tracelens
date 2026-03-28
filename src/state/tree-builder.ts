@@ -28,12 +28,64 @@ export function extractAgentName(filename: string): string {
   return withoutHash || withoutPrefix
 }
 
+function readAgentMetaName(metaPath: string): string | null {
+  try {
+    const raw = fs.readFileSync(metaPath, 'utf8')
+    const meta = JSON.parse(raw as string)
+    if (meta.description) return meta.description as string
+    if (meta.agentType) {
+      const t = meta.agentType as string
+      const colonIdx = t.lastIndexOf(':')
+      return colonIdx >= 0 ? t.slice(colonIdx + 1) : t
+    }
+  } catch { /* fallback al nombre del archivo */ }
+  return null
+}
+
 export function cwdToProjectDirHash(cwd: string): string {
   return cwd.replace(/\//g, '-')
 }
 
 export function buildAgentKey(sessionId: string, agentId: string | null): string {
   return `${sessionId}:${agentId ?? '__orch__'}`
+}
+
+function findMostRecentJsonl(projectPath: string): string | null {
+  if (!fs.existsSync(projectPath)) return null
+  try {
+    let mostRecent: string | null = null
+    let mostRecentMtime = 0
+    for (const f of fs.readdirSync(projectPath) as string[]) {
+      if (!f.endsWith('.jsonl')) continue
+      const filePath = path.join(projectPath, f)
+      try {
+        const stat = fs.statSync(filePath)
+        if (stat.mtimeMs > mostRecentMtime) {
+          mostRecentMtime = stat.mtimeMs
+          mostRecent = filePath
+        }
+      } catch { /* skip */ }
+    }
+    return mostRecent
+  } catch { return null }
+}
+
+function extractSessionIdFromJsonl(jsonlPath: string): string | null {
+  try {
+    const fd = fs.openSync(jsonlPath, 'r')
+    const buf = Buffer.allocUnsafe(4096)
+    const bytesRead = fs.readSync(fd, buf, 0, 4096, 0)
+    fs.closeSync(fd)
+    const lines = buf.subarray(0, bytesRead).toString('utf8').split('\n')
+    for (const line of lines) {
+      if (!line.trim()) continue
+      try {
+        const entry = JSON.parse(line) as Record<string, unknown>
+        if (entry['sessionId']) return entry['sessionId'] as string
+      } catch { /* skip malformed line */ }
+    }
+    return null
+  } catch { return null }
 }
 
 export function discoverSessions(
@@ -43,21 +95,32 @@ export function discoverSessions(
   return activeSessions.map(session => {
     const projectHash = cwdToProjectDirHash(session.cwd)
     const projectPath = path.join(claudeProjectsDir, projectHash)
-    const jsonlPath = path.join(projectPath, `${session.sessionId}.jsonl`)
-    const subAgentsDir = path.join(projectPath, session.sessionId, 'subagents')
+
+    // /clear crea un nuevo sessionId pero no actualiza ~/.claude/sessions/.
+    // Usar el JSONL más reciente del directorio para reflejar la conversación activa.
+    const mostRecentJsonl = findMostRecentJsonl(projectPath)
+    const actualSessionId = mostRecentJsonl
+      ? (extractSessionIdFromJsonl(mostRecentJsonl) ?? session.sessionId)
+      : session.sessionId
+    const jsonlPath = mostRecentJsonl ?? path.join(projectPath, `${session.sessionId}.jsonl`)
+    const subAgentsDir = path.join(projectPath, actualSessionId, 'subagents')
 
     let subAgentPaths: SubAgentPath[] = []
     if (fs.existsSync(subAgentsDir)) {
       subAgentPaths = fs.readdirSync(subAgentsDir)
         .filter((f: string) => f.endsWith('.jsonl'))
-        .map((f: string) => ({
-          agentId: f.replace(/^agent-/, '').replace('.jsonl', ''),
-          name: extractAgentName(f),
-          filePath: path.join(subAgentsDir, f),
-        }))
+        .map((f: string) => {
+          const metaPath = path.join(subAgentsDir, f.replace('.jsonl', '.meta.json'))
+          const metaName = fs.existsSync(metaPath) ? readAgentMetaName(metaPath) : null
+          return {
+            agentId: f.replace(/^agent-/, '').replace('.jsonl', ''),
+            name: metaName ?? extractAgentName(f),
+            filePath: path.join(subAgentsDir, f),
+          }
+        })
     }
 
-    return { sessionId: session.sessionId, cwd: session.cwd, startedAt: session.startedAt, jsonlPath, subAgentPaths }
+    return { sessionId: actualSessionId, cwd: session.cwd, startedAt: session.startedAt, jsonlPath, subAgentPaths }
   })
 }
 
@@ -70,8 +133,7 @@ export function buildAppState(
   accumulator: TokenAccumulator,
   burnTracker: BurnTracker,
   window: WindowState | null,
-  claudeProjectsDir?: string,
-  showInactive = false
+  claudeProjectsDir?: string
 ): AppState {
   const now = Date.now()
   const remainingMinutes = window ? Math.max(0, (window.windowEnd - now / 1000) / 60) : 0
@@ -85,23 +147,25 @@ export function buildAppState(
     const orchBurn = burnTracker.getBurnRate(orchKey, now)
     const orchDanger = ceiling > 0 ? calculateDangerRatio(orchTotals.totalTokens, orchBurn, remainingMinutes, ceiling) : 0
 
-    const subAgents: AgentState[] = d.subAgentPaths.map(sa => {
-      const key = buildAgentKey(d.sessionId, sa.agentId)
-      const totals = accumulator.getTotals(d.sessionId, sa.agentId)
-      const burn = burnTracker.getBurnRate(key, now)
-      const danger = ceiling > 0 ? calculateDangerRatio(totals.totalTokens, burn, remainingMinutes, ceiling) : 0
-      return {
-        sessionId: d.sessionId,
-        agentId: sa.agentId,
-        name: sa.name,
-        model: accumulator.getLastModel(d.sessionId, sa.agentId),
-        totals,
-        burnRatePerMinute: burn,
-        dangerRatio: danger,
-        color: dangerColor(danger),
-        isSidechain: true,
-      }
-    })
+    const subAgents: AgentState[] = d.subAgentPaths
+      .map(sa => {
+        const key = buildAgentKey(d.sessionId, sa.agentId)
+        const totals = accumulator.getTotals(d.sessionId, sa.agentId)
+        const burn = burnTracker.getBurnRate(key, now)
+        const danger = ceiling > 0 ? calculateDangerRatio(totals.totalTokens, burn, remainingMinutes, ceiling) : 0
+        return {
+          sessionId: d.sessionId,
+          agentId: sa.agentId,
+          name: sa.name,
+          model: accumulator.getLastModel(d.sessionId, sa.agentId),
+          totals,
+          burnRatePerMinute: burn,
+          dangerRatio: danger,
+          color: dangerColor(danger),
+          isSidechain: true,
+        }
+      })
+      .filter(sa => sa.burnRatePerMinute > 0)
 
     const sessionDanger = subAgents.length > 0
       ? Math.max(...subAgents.map(a => a.dangerRatio))
@@ -134,12 +198,7 @@ export function buildAppState(
     }
   })
 
-  const visible = showInactive
-    ? sessionStates
-    : sessionStates.filter(s =>
-        s.orchestrator.burnRatePerMinute > 0 ||
-        s.subAgents.some(a => a.burnRatePerMinute > 0)
-      )
+  const visible = sessionStates
 
   const totalCost = visible.reduce((sum, s) => {
     return sum + s.orchestrator.totals.cost + s.subAgents.reduce((a, sa) => a + sa.totals.cost, 0)

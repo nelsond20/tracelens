@@ -26,6 +26,8 @@ export class JournalProvider extends EventEmitter implements DataProvider<Journa
     this.watcher = chokidar.watch(this.watchPaths, {
       persistent: true,
       ignoreInitial: true,
+      usePolling: true,
+      interval: 500,
     })
     this.watcher.on('change', (filePath: string) => this.readFile(filePath, false))
     for (const p of this.watchPaths) this.readFile(p, true)

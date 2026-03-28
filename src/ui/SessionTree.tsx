@@ -63,23 +63,50 @@ function ProjectNode({ session }: { session: SessionState }) {
       <Text color={c}>{`╔${border}╗`}</Text>
       <Text color={c}>{`║${inner}║`}</Text>
       <Text color={c}>{bottom}</Text>
+      <Text color={c}>│</Text>
 
-      {hasSubAgents ? (
+      <AgentNode agent={session.orchestrator} />
+
+      {hasSubAgents && (
         <>
+          <Text color={c}>│</Text>
           <Text color={c}>{session.subAgents.length > 1 ? branchLine(subRow) : '│'}</Text>
           <Box flexDirection="row" gap={4}>
             {session.subAgents.map(agent => (
               <AgentNode key={agent.agentId ?? agent.name} agent={agent} />
             ))}
           </Box>
-          <Text color={c}>│</Text>
         </>
-      ) : (
-        <Text color={c}>│</Text>
       )}
-
-      <AgentNode agent={session.orchestrator} />
     </Box>
+  )
+}
+
+function projectBoxTopWidth(session: SessionState): number {
+  return path.basename(session.cwd).length + 4  // ╔ + ' name ' + ╗
+}
+
+function sessionsBranchLine(sessions: SessionState[], gap = 4): string {
+  const subtreeWidths = sessions.map(s => projectSubtreeWidth(s))
+  const total = allProjectsWidth(sessions, gap)
+
+  const firstBoxW = projectBoxTopWidth(sessions[0])
+  const startPos = Math.floor((subtreeWidths[0] - firstBoxW) / 2)
+
+  const lastBoxW = projectBoxTopWidth(sessions[sessions.length - 1])
+  const lastSubStart = total - subtreeWidths[subtreeWidths.length - 1]
+  const endPos = lastSubStart + Math.floor((subtreeWidths[subtreeWidths.length - 1] - lastBoxW) / 2) + lastBoxW - 1
+
+  const midPos = Math.floor(total / 2)
+  const leftArm = midPos - startPos - 1
+  const rightArm = endPos - midPos - 1
+
+  if (leftArm < 0 || rightArm < 0) return branchLine(total)
+
+  return (
+    ' '.repeat(startPos) +
+    '┌' + '─'.repeat(leftArm) + '┴' + '─'.repeat(rightArm) + '┐' +
+    ' '.repeat(total - endPos - 1)
   )
 }
 
@@ -87,7 +114,6 @@ export function SessionTree({ sessions }: { sessions: SessionState[] }) {
   if (sessions.length === 0) return <Text color="#6e7681">  sin sesiones activas</Text>
 
   const rootLabel = `${os.userInfo().username}@${os.hostname()}`
-  const totalW    = allProjectsWidth(sessions)
 
   return (
     <Box flexDirection="column" alignItems="center">
@@ -95,7 +121,7 @@ export function SessionTree({ sessions }: { sessions: SessionState[] }) {
       <Text color="#58a6ff">│</Text>
 
       {sessions.length > 1 && (
-        <Text color="#58a6ff">{branchLine(totalW)}</Text>
+        <Text color="#58a6ff">{sessionsBranchLine(sessions)}</Text>
       )}
 
       <Box flexDirection="row" gap={4} alignItems="flex-start">

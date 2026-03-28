@@ -52,7 +52,7 @@ describe('buildAppState filtering', () => {
     vi.mocked(fs.existsSync).mockReturnValue(false)
   })
 
-  it('excluye sesiones sin actividad por defecto', () => {
+  it('muestra todas las sesiones activas independientemente del burn rate', () => {
     const sessions = [
       { sessionId: 'active', pid: 1, cwd: '/proj/a', startedAt: 0, kind: 'interactive' as const, active: true },
       { sessionId: 'idle',   pid: 2, cwd: '/proj/b', startedAt: 0, kind: 'interactive' as const, active: true },
@@ -63,11 +63,10 @@ describe('buildAppState filtering', () => {
 
     const state = buildAppState(sessions, acc, burn, null, '/fake/projects')
 
-    expect(state.sessions).toHaveLength(1)
-    expect(state.sessions[0].sessionId).toBe('active')
+    expect(state.sessions).toHaveLength(2)
   })
 
-  it('muestra todas las sesiones cuando showInactive es true', () => {
+  it('muestra todas las sesiones en la lista, incluyendo las ociosas', () => {
     const sessions = [
       { sessionId: 'active', pid: 1, cwd: '/proj/a', startedAt: 0, kind: 'interactive' as const, active: true },
       { sessionId: 'idle',   pid: 2, cwd: '/proj/b', startedAt: 0, kind: 'interactive' as const, active: true },
@@ -76,7 +75,7 @@ describe('buildAppState filtering', () => {
     const burn = new BurnTracker()
     burn.recordTokens('active:__orch__', 500)
 
-    const state = buildAppState(sessions, acc, burn, null, '/fake/projects', true)
+    const state = buildAppState(sessions, acc, burn, null, '/fake/projects')
 
     expect(state.sessions).toHaveLength(2)
     expect(state.sessions.map(s => s.sessionId)).toContain('idle')
