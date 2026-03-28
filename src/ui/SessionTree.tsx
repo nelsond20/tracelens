@@ -14,7 +14,7 @@ export function subAgentsRowWidth(subAgents: AgentState[], gap = 4): number {
 
 export function branchLine(totalWidth: number): string {
   if (totalWidth < 3) return '│'
-  const leftArm  = Math.floor(totalWidth / 2) - 1
+  const leftArm  = Math.floor((totalWidth - 1) / 2) - 1
   const rightArm = totalWidth - leftArm - 3
   return '┌' + '─'.repeat(leftArm) + '┴' + '─'.repeat(rightArm) + '┐'
 }
@@ -83,11 +83,38 @@ function ProjectNode({ session }: { session: SessionState }) {
   )
 }
 
+function projectBoxTopWidth(session: SessionState): number {
+  return path.basename(session.cwd).length + 4  // ╔ + ' name ' + ╗
+}
+
+function sessionsBranchLine(sessions: SessionState[], gap = 4): string {
+  const subtreeWidths = sessions.map(s => projectSubtreeWidth(s))
+  const total = allProjectsWidth(sessions, gap)
+
+  const firstBoxW = projectBoxTopWidth(sessions[0])
+  const startPos = Math.floor((subtreeWidths[0] - firstBoxW) / 2)
+
+  const lastBoxW = projectBoxTopWidth(sessions[sessions.length - 1])
+  const lastSubStart = total - subtreeWidths[subtreeWidths.length - 1]
+  const endPos = lastSubStart + Math.floor((subtreeWidths[subtreeWidths.length - 1] - lastBoxW) / 2) + lastBoxW - 1
+
+  const midPos = Math.floor((total - 1) / 2)
+  const leftArm = midPos - startPos - 1
+  const rightArm = endPos - midPos - 1
+
+  if (leftArm < 0 || rightArm < 0) return branchLine(total)
+
+  return (
+    ' '.repeat(startPos) +
+    '┌' + '─'.repeat(leftArm) + '┴' + '─'.repeat(rightArm) + '┐' +
+    ' '.repeat(total - endPos - 1)
+  )
+}
+
 export function SessionTree({ sessions }: { sessions: SessionState[] }) {
   if (sessions.length === 0) return <Text color="#6e7681">  sin sesiones activas</Text>
 
   const rootLabel = `${os.userInfo().username}@${os.hostname()}`
-  const totalW    = allProjectsWidth(sessions)
 
   return (
     <Box flexDirection="column" alignItems="center">
@@ -95,7 +122,7 @@ export function SessionTree({ sessions }: { sessions: SessionState[] }) {
       <Text color="#58a6ff">│</Text>
 
       {sessions.length > 1 && (
-        <Text color="#58a6ff">{branchLine(totalW)}</Text>
+        <Text color="#58a6ff">{sessionsBranchLine(sessions)}</Text>
       )}
 
       <Box flexDirection="row" gap={4} alignItems="flex-start">
